@@ -85,7 +85,9 @@ Boot installer (PIO mode recommended during install):
     -bios ppc.rom \
     -global macio-ide.use-dma=false \
     -drive file=9.qcow2,format=qcow2,media=disk \
-    -cdrom 9.iso -boot d
+    -cdrom 9.iso -boot d \
+    -nic user,model=sungem \
+    -audiodev coreaudio,id=ca
 
 Notes:
 
@@ -94,6 +96,11 @@ Notes:
 - Screamer audio is enabled via MacIO; default macOS audio backend is used.
 - Input via ADB (CUDA) works out of the box; you may add USB input devices
   if preferred (e.g. ``-device usb-kbd -device usb-mouse``).
+ - Networking (slirp): ``-nic user,model=sungem`` provides NAT with DHCP. In
+   Mac OS 9, set TCP/IP to “Using DHCP Server” for automatic addressing. Some
+   OS 9 releases may require the appropriate Ethernet driver to be present.
+ - Audio (CoreAudio): ``-audiodev coreaudio,id=ca`` enables sound output on
+   macOS hosts using the CoreAudio backend.
 
 
 Boot from the installed disk
@@ -108,7 +115,9 @@ Once the installer finishes and you reboot, boot from the hard disk:
     -bios ppc.rom \
     -global macio-ide.use-dma=false \
     -drive file=9.qcow2,format=qcow2,media=disk \
-    -boot c
+    -boot c \
+    -nic user,model=sungem \
+    -audiodev coreaudio,id=ca
 
 You may try re-enabling IDE DMA later by removing the ``-global`` setting.
 
