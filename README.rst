@@ -1,171 +1,130 @@
-===========
-QEMU README
-===========
+=========================
+QEMU PPC Screamer (mac99)
+=========================
 
-QEMU is a generic and open source machine & userspace emulator and
-virtualizer.
+This fork focuses on running classic Mac OS 9 on the New World PowerMac
+``mac99`` machine with Screamer audio. It adds:
 
-QEMU is capable of emulating a complete machine in software without any
-need for hardware virtualization support. By using dynamic translation,
-it achieves very good performance. QEMU can also integrate with the Xen
-and KVM hypervisors to provide emulated hardware while allowing the
-hypervisor to manage the CPU. With hypervisor support, QEMU can achieve
-near native performance for CPUs. When QEMU emulates CPUs directly it is
-capable of running operating systems made for one machine (e.g. an ARMv7
-board) on a different machine (e.g. an x86_64 PC board).
-
-QEMU is also capable of providing userspace API virtualization for Linux
-and BSD kernel interfaces. This allows binaries compiled against one
-architecture ABI (e.g. the Linux PPC64 ABI) to be run on a host using a
-different architecture ABI (e.g. the Linux x86_64 ABI). This does not
-involve any hardware emulation, simply CPU and syscall emulation.
-
-QEMU aims to fit into a variety of use cases. It can be invoked directly
-by users wishing to have full control over its behaviour and settings.
-It also aims to facilitate integration into higher level management
-layers, by providing a stable command line interface and monitor API.
-It is commonly invoked indirectly via the libvirt library when using
-open source applications such as oVirt, OpenStack and virt-manager.
-
-QEMU as a whole is released under the GNU General Public License,
-version 2. For full licensing details, consult the LICENSE file.
+- Support for loading SheepShaver-style New World ROMs ("Mac OS ROM").
+- Reliable reset vector at ``0xFFF00100`` for raw ROMs larger than 1 MiB.
+- A switch to force PIO mode on MacIO IDE (avoids OS 9 install stalls).
+- Default Apple-like HDD model string (improves Drive Setup compatibility).
 
 
-Documentation
-=============
+Build (macOS Universal)
+=======================
 
-Documentation can be found hosted online at
-`<https://www.qemu.org/documentation/>`_. The documentation for the
-current development version that is available at
-`<https://www.qemu.org/docs/master/>`_ is generated from the ``docs/``
-folder in the source tree, and is built by `Sphinx
-<https://www.sphinx-doc.org/en/master/>`_.
+Option A: Use GitHub Actions (recommended)
+-----------------------------------------
+
+Push to this repo. The workflow builds x86_64 and arm64 binaries and
+publishes a universal2 CLI binary (``qemu-system-ppc-universal``) under the
+"Continuous" Release.
 
 
-Building
-========
+Option B: Local universal build
+-------------------------------
 
-QEMU is multi-platform software intended to be buildable on all modern
-Linux platforms, OS-X, Win32 (via the Mingw64 toolchain) and a variety
-of other UNIX targets. The simple steps to build QEMU are:
+You can build per-arch binaries and lipo them together.
 
+Requirements (Homebrew):
 
 .. code-block:: shell
 
-  mkdir build
-  cd build
-  ../configure
-  make
+  brew install meson ninja pkg-config glib pixman
 
-Additional information can also be found online via the QEMU website:
-
-* `<https://wiki.qemu.org/Hosts/Linux>`_
-* `<https://wiki.qemu.org/Hosts/Mac>`_
-* `<https://wiki.qemu.org/Hosts/W32>`_
-
-
-Submitting patches
-==================
-
-The QEMU source code is maintained under the GIT version control system.
+Build arm64 binary (Apple Silicon):
 
 .. code-block:: shell
 
-   git clone https://gitlab.com/qemu-project/qemu.git
+  ./configure --target-list=ppc-softmmu --disable-werror --disable-fuse --disable-fuse-lseek
+  ninja -C build qemu-system-ppc
+  mv build/qemu-system-ppc qemu-system-ppc-arm64
 
-When submitting patches, one common approach is to use 'git
-format-patch' and/or 'git send-email' to format & send the mail to the
-qemu-devel@nongnu.org mailing list. All patches submitted must contain
-a 'Signed-off-by' line from the author. Patches should follow the
-guidelines set out in the `style section
-<https://www.qemu.org/docs/master/devel/style.html>`_ of
-the Developers Guide.
+Build x86_64 binary (Rosetta toolchain):
 
-Additional information on submitting patches can be found online via
-the QEMU website:
-
-* `<https://wiki.qemu.org/Contribute/SubmitAPatch>`_
-* `<https://wiki.qemu.org/Contribute/TrivialPatches>`_
-
-The QEMU website is also maintained under source control.
+Install x86_64 Homebrew (in */usr/local*) and ensure its pkg-config/libs are on
+PATH under Rosetta. Then:
 
 .. code-block:: shell
 
-  git clone https://gitlab.com/qemu-project/qemu-web.git
+  env CFLAGS="-arch x86_64" LDFLAGS="-arch x86_64" \
+    ./configure --target-list=ppc-softmmu --disable-werror --disable-fuse --disable-fuse-lseek
+  ninja -C build qemu-system-ppc
+  mv build/qemu-system-ppc qemu-system-ppc-x86_64
 
-* `<https://www.qemu.org/2017/02/04/the-new-qemu-website-is-up/>`_
-
-A 'git-publish' utility was created to make above process less
-cumbersome, and is highly recommended for making regular contributions,
-or even just for sending consecutive patch series revisions. It also
-requires a working 'git send-email' setup, and by default doesn't
-automate everything, so you may want to go through the above steps
-manually for once.
-
-For installation instructions, please go to:
-
-*  `<https://github.com/stefanha/git-publish>`_
-
-The workflow with 'git-publish' is:
+Create universal2 binary:
 
 .. code-block:: shell
 
-  $ git checkout master -b my-feature
-  $ # work on new commits, add your 'Signed-off-by' lines to each
-  $ git publish
+  lipo -create qemu-system-ppc-x86_64 qemu-system-ppc-arm64 -output qemu-system-ppc-universal
+  chmod +x qemu-system-ppc-universal
 
-Your patch series will be sent and tagged as my-feature-v1 if you need to refer
-back to it in the future.
 
-Sending v2:
+Install Mac OS 9 (SheepShaver ROM)
+==================================
+
+Inputs:
+
+- New World ROM file (SheepShaver-style), e.g. ``ppc.rom`` (2–4 MiB).
+- Mac OS 9.0.4 ISO, e.g. ``9.iso``.
+- New qcow2 disk image, e.g. ``9.qcow2``.
+
+Create disk image:
 
 .. code-block:: shell
 
-  $ git checkout my-feature # same topic branch
-  $ # making changes to the commits (using 'git rebase', for example)
-  $ git publish
+  qemu-img create -f qcow2 9.qcow2 4G
 
-Your patch series will be sent with 'v2' tag in the subject and the git tip
-will be tagged as my-feature-v2.
+Boot installer (PIO mode recommended during install):
 
-Bug reporting
-=============
+.. code-block:: shell
 
-The QEMU project uses GitLab issues to track bugs. Bugs
-found when running code built from QEMU git or upstream released sources
-should be reported via:
+  ./qemu-system-ppc-universal \
+    -M mac99,via=cuda -cpu 7400 -m 256 \
+    -bios ppc.rom \
+    -global macio-ide.use-dma=false \
+    -drive file=9.qcow2,format=qcow2,media=disk \
+    -cdrom 9.iso -boot d
 
-* `<https://gitlab.com/qemu-project/qemu/-/issues>`_
+Notes:
 
-If using QEMU via an operating system vendor pre-built binary package, it
-is preferable to report bugs to the vendor's own bug tracker first. If
-the bug is also known to affect latest upstream code, it can also be
-reported via GitLab.
-
-For additional information on bug reporting consult:
-
-* `<https://wiki.qemu.org/Contribute/ReportABug>`_
+- ``-global macio-ide.use-dma=false`` forces PIO mode and avoids rare
+  stalls at "Updating Apple Hard Disk Drivers" and early large writes.
+- Screamer audio is enabled via MacIO; default macOS audio backend is used.
+- Input via ADB (CUDA) works out of the box; you may add USB input devices
+  if preferred (e.g. ``-device usb-kbd -device usb-mouse``).
 
 
-ChangeLog
-=========
+Boot from the installed disk
+============================
 
-For version history and release notes, please visit
-`<https://wiki.qemu.org/ChangeLog/>`_ or look at the git history for
-more detailed information.
+Once the installer finishes and you reboot, boot from the hard disk:
+
+.. code-block:: shell
+
+  ./qemu-system-ppc-universal \
+    -M mac99,via=cuda -cpu 7400 -m 256 \
+    -bios ppc.rom \
+    -global macio-ide.use-dma=false \
+    -drive file=9.qcow2,format=qcow2,media=disk \
+    -boot c
+
+You may try re-enabling IDE DMA later by removing the ``-global`` setting.
 
 
-Contact
+Troubleshooting
+===============
+
+- ROM mapping: this tree auto-detects raw (non-ELF) ROMs and maps them at the
+  top of 32-bit memory, ensuring the reset vector at ``0xFFF00100`` works.
+- Video: for the best compatibility with Mac OS 9 using an Apple ROM, consider
+  a PCI GPU with a Mac NDRV ROM. The default VGA may work, but acceleration and
+  driver support can vary.
+
+
+License
 =======
 
-The QEMU community can be contacted in a number of ways, with the two
-main methods being email and IRC:
-
-* `<mailto:qemu-devel@nongnu.org>`_
-* `<https://lists.nongnu.org/mailman/listinfo/qemu-devel>`_
-* #qemu on irc.oftc.net
-
-Information on additional methods of contacting the community can be
-found online via the QEMU website:
-
-* `<https://wiki.qemu.org/Contribute/StartHere>`_
+This repository is based on QEMU and is released under the terms of the GNU
+General Public License, version 2. See LICENSE for details.
