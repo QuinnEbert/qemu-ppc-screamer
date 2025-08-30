@@ -106,7 +106,13 @@ jobs:
           rsync -a --delete pc-bios/ "$PKG_DIR/share/qemu/"
 
           # Package the single folder so users get one directory on unzip
-          zip -9 -r qemu-system-ppc-universal.zip "$PKG_DIR"
+          (
+            cd "$(dirname "$PKG_DIR")" || exit 1
+            zip -9 -r "$GITHUB_WORKSPACE/qemu-system-ppc-universal.zip" "$(basename "$PKG_DIR")"
+          )
+
+          echo "Listing packaged contents for verification:"
+          unzip -l qemu-system-ppc-universal.zip | sed -n '1,200p'
 
           # Also package per-arch binaries for convenience (no bundle)
           zip -9 qemu-system-ppc-x86_64.zip artifacts/qemu-system-ppc-x86_64
