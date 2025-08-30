@@ -105,14 +105,14 @@ jobs:
           mv qemu-system-ppc-universal "$PKG_DIR/bin/"
           rsync -a --delete pc-bios/ "$PKG_DIR/share/qemu/"
 
-          # Package the single folder so users get one directory on unzip
-          (
-            cd "$(dirname "$PKG_DIR")" || exit 1
-            zip -9 -r "$GITHUB_WORKSPACE/qemu-system-ppc-universal.zip" "$(basename "$PKG_DIR")"
-          )
+          # Package the single folder so users get one directory on unzip.
+          # Use macOS 'ditto' which preserves the parent directory reliably.
+          rm -f qemu-system-ppc-universal.zip
+          ditto -c -k --keepParent "$PKG_DIR" qemu-system-ppc-universal.zip
 
           echo "Listing packaged contents for verification:"
-          unzip -l qemu-system-ppc-universal.zip | sed -n '1,200p'
+          echo "ZIP entry sample (should be prefixed by $PKG_DIR/):"
+          unzip -Z1 qemu-system-ppc-universal.zip | sed -n '1,20p'
 
           # Also package per-arch binaries for convenience (no bundle)
           zip -9 qemu-system-ppc-x86_64.zip artifacts/qemu-system-ppc-x86_64
