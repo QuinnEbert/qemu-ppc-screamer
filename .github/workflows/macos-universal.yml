@@ -1,0 +1,115 @@
+name: macOS Universal Build
+
+on:
+  push:
+    branches:
+      - '**'
+
+permissions:
+  contents: write
+
+jobs:
+  build-x86_64:
+    name: Build x86_64
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (brew)
+        run: |
+          brew update
+          brew install meson ninja pkg-config glib pixman
+
+      - name: Prepare Python deps
+        run: |
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user tomli distlib
+
+      - name: Configure + Build (x86_64)
+        env:
+          CFLAGS: "-arch x86_64"
+          LDFLAGS: "-arch x86_64"
+        run: |
+          ./configure --target-list=ppc-softmmu --disable-werror --disable-fuse --disable-fuse-lseek
+          ninja -C build qemu-system-ppc
+          mv build/qemu-system-ppc qemu-system-ppc-x86_64
+
+      - name: Upload artifact (x86_64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-ppc-x86_64
+          path: qemu-system-ppc-x86_64
+
+  build-arm64:
+    name: Build arm64
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies (brew)
+        run: |
+          brew update
+          brew install meson ninja pkg-config glib pixman
+
+      - name: Prepare Python deps
+        run: |
+          python3 -m pip install --user --upgrade pip
+          python3 -m pip install --user tomli distlib
+
+      - name: Configure + Build (arm64)
+        env:
+          CFLAGS: "-arch arm64"
+          LDFLAGS: "-arch arm64"
+        run: |
+          ./configure --target-list=ppc-softmmu --disable-werror --disable-fuse --disable-fuse-lseek
+          ninja -C build qemu-system-ppc
+          mv build/qemu-system-ppc qemu-system-ppc-arm64
+
+      - name: Upload artifact (arm64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: qemu-ppc-arm64
+          path: qemu-system-ppc-arm64
+
+  universal:
+    name: Make universal + Release
+    needs: [build-x86_64, build-arm64]
+    runs-on: macos-14
+    steps:
+      - name: Download x86_64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: qemu-ppc-x86_64
+          path: artifacts
+
+      - name: Download arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: qemu-ppc-arm64
+          path: artifacts
+
+      - name: Create universal2 binary
+        run: |
+          lipo -create artifacts/qemu-system-ppc-x86_64 artifacts/qemu-system-ppc-arm64 -output qemu-system-ppc-universal
+          chmod +x qemu-system-ppc-universal
+          zip -9 qemu-system-ppc-universal.zip qemu-system-ppc-universal
+
+      - name: Publish to 'continuous' Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: continuous
+          name: Continuous
+          body: |
+            Automated universal macOS build
+
+            Commit: ${{ github.sha }}
+          draft: false
+          prerelease: true
+          make_latest: true
+          files: |
+            qemu-system-ppc-universal.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
