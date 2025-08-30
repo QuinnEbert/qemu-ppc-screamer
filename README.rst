@@ -86,8 +86,10 @@ Boot installer (PIO mode recommended during install):
     -global macio-ide.use-dma=false \
     -drive file=9.qcow2,format=qcow2,media=disk \
     -cdrom 9.iso -boot d \
+    -prom-env "vga-ndrv?=true" \
     -nic user,model=sungem \
-    -audiodev coreaudio,id=default
+    -audiodev coreaudio,id=default \
+    -machine audiodev=default
 
 Notes:
 
@@ -116,8 +118,10 @@ Once the installer finishes and you reboot, boot from the hard disk:
     -global macio-ide.use-dma=false \
     -drive file=9.qcow2,format=qcow2,media=disk \
     -boot c \
+    -prom-env "vga-ndrv?=true" \
     -nic user,model=sungem \
-    -audiodev coreaudio,id=default
+    -audiodev coreaudio,id=default \
+    -machine audiodev=default
 
 You may try re-enabling IDE DMA later by removing the ``-global`` setting.
 
@@ -140,15 +144,25 @@ Troubleshooting
   - Configure: ``./configure --target-list=ppc-softmmu --enable-slirp``
   - Build: ``ninja -C build qemu-system-ppc``
 
-- Audio: the examples use ``-audiodev coreaudio,id=default``. The ``default``
-  id is special: devices that don’t explicitly pick an ``audiodev`` use it
-  automatically. If you change the id, also set ``-machine audiodev=<id>``.
+- Audio: the examples use ``-audiodev coreaudio,id=default`` and explicitly
+  set ``-machine audiodev=default`` so built‑in devices (like Screamer) pick
+  it up. The ``default`` id is special: devices that don’t explicitly pick an
+  ``audiodev`` use it automatically. If you change the id (e.g. to ``ca``),
+  also add ``-machine audiodev=ca``. Otherwise QEMU will print
+  "no default audio driver available" and audio won’t initialize.
 
-- VGA BIOS not found: the CI universal zip now contains ROMs under a relocatable
-  bundle (``qemu-bundle/usr/local/share/qemu``). Running the downloaded
-  ``qemu-system-ppc-universal`` in place will find ``vgabios-stdvga.bin``
-  without extra flags. If you move only the binary and not the bundle, either
-  keep them together or run with ``-L /path/to/share/qemu``.
+- Display: if the UI window shows "Guest has not initialized the display (yet)"
+  and stays there, add ``-prom-env "vga-ndrv?=true"`` so OpenBIOS provides a
+  Mac NDRV for VGA which Mac OS 9 relies on. Also ensure VGA BIOS files are
+  discoverable; if running outside the repo root or a bundled release, add
+  ``-L pc-bios`` (or the path to ``share/qemu``) so QEMU can find ``vgabios``.
+
+- VGA BIOS not found: the CI universal ZIP now unpacks a flat layout with
+  ``bin/qemu-system-ppc-universal`` and ``share/qemu`` next to each other.
+  Run the binary from the ``bin`` directory and it will find
+  ``../share/qemu`` automatically via relocatable lookup. If you move things
+  around, keep ``bin`` and ``share/qemu`` together or run with
+  ``-L /path/to/share/qemu``.
 
 
 License
