@@ -19,7 +19,7 @@ jobs:
       - name: Install dependencies (brew)
         run: |
           brew update
-          brew install meson ninja pkg-config glib pixman
+          brew install meson ninja pkg-config glib pixman libslirp
 
       - name: Prepare Python deps
         run: |
@@ -31,7 +31,7 @@ jobs:
           CFLAGS: "-arch x86_64"
           LDFLAGS: "-arch x86_64"
         run: |
-          ./configure --target-list=ppc-softmmu --disable-werror --disable-fuse --disable-fuse-lseek
+          ./configure --target-list=ppc-softmmu --disable-werror --disable-fuse --disable-fuse-lseek --enable-slirp --enable-coreaudio
           ninja -C build qemu-system-ppc
           mv build/qemu-system-ppc qemu-system-ppc-x86_64
 
@@ -51,7 +51,7 @@ jobs:
       - name: Install dependencies (brew)
         run: |
           brew update
-          brew install meson ninja pkg-config glib pixman
+          brew install meson ninja pkg-config glib pixman libslirp
 
       - name: Prepare Python deps
         run: |
@@ -63,7 +63,7 @@ jobs:
           CFLAGS: "-arch arm64"
           LDFLAGS: "-arch arm64"
         run: |
-          ./configure --target-list=ppc-softmmu --disable-werror --disable-fuse --disable-fuse-lseek
+          ./configure --target-list=ppc-softmmu --disable-werror --disable-fuse --disable-fuse-lseek --enable-slirp --enable-coreaudio
           ninja -C build qemu-system-ppc
           mv build/qemu-system-ppc qemu-system-ppc-arm64
 
@@ -78,6 +78,8 @@ jobs:
     needs: [build-x86_64, build-arm64]
     runs-on: macos-14
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
       - name: Download x86_64 artifact
         uses: actions/download-artifact@v4
         with:
@@ -92,10 +94,18 @@ jobs:
 
       - name: Create universal2 binary
         run: |
+          # Create universal binary
           lipo -create artifacts/qemu-system-ppc-x86_64 artifacts/qemu-system-ppc-arm64 -output qemu-system-ppc-universal
           chmod +x qemu-system-ppc-universal
-          zip -9 qemu-system-ppc-universal.zip qemu-system-ppc-universal
-          # Also package per-arch binaries for convenience
+
+          # Bundle ROMs for relocatable lookup via qemu-bundle
+          mkdir -p "qemu-bundle/usr/local/share/qemu"
+          rsync -a --delete pc-bios/ "qemu-bundle/usr/local/share/qemu/"
+
+          # Package universal zip with bundled ROMs
+          zip -9 -r qemu-system-ppc-universal.zip qemu-system-ppc-universal qemu-bundle
+
+          # Also package per-arch binaries for convenience (no bundle)
           zip -9 qemu-system-ppc-x86_64.zip artifacts/qemu-system-ppc-x86_64
           zip -9 qemu-system-ppc-arm64.zip artifacts/qemu-system-ppc-arm64
 

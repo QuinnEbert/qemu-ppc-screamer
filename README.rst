@@ -87,7 +87,7 @@ Boot installer (PIO mode recommended during install):
     -drive file=9.qcow2,format=qcow2,media=disk \
     -cdrom 9.iso -boot d \
     -nic user,model=sungem \
-    -audiodev coreaudio,id=ca
+    -audiodev coreaudio,id=default
 
 Notes:
 
@@ -117,7 +117,7 @@ Once the installer finishes and you reboot, boot from the hard disk:
     -drive file=9.qcow2,format=qcow2,media=disk \
     -boot c \
     -nic user,model=sungem \
-    -audiodev coreaudio,id=ca
+    -audiodev coreaudio,id=default
 
 You may try re-enabling IDE DMA later by removing the ``-global`` setting.
 
@@ -130,6 +130,25 @@ Troubleshooting
 - Video: for the best compatibility with Mac OS 9 using an Apple ROM, consider
   a PCI GPU with a Mac NDRV ROM. The default VGA may work, but acceleration and
   driver support can vary.
+
+- Networking backend not compiled: if you see "network backend 'user' is not
+  compiled into this binary" when using ``-nic user,model=sungem``, the build
+  lacked libslirp. Use a release after this fix or build with libslirp
+  available and explicitly enable it, for example on macOS:
+
+  - Install deps: ``brew install libslirp glib pixman meson ninja pkg-config``
+  - Configure: ``./configure --target-list=ppc-softmmu --enable-slirp``
+  - Build: ``ninja -C build qemu-system-ppc``
+
+- Audio: the examples use ``-audiodev coreaudio,id=default``. The ``default``
+  id is special: devices that don’t explicitly pick an ``audiodev`` use it
+  automatically. If you change the id, also set ``-machine audiodev=<id>``.
+
+- VGA BIOS not found: the CI universal zip now contains ROMs under a relocatable
+  bundle (``qemu-bundle/usr/local/share/qemu``). Running the downloaded
+  ``qemu-system-ppc-universal`` in place will find ``vgabios-stdvga.bin``
+  without extra flags. If you move only the binary and not the bundle, either
+  keep them together or run with ``-L /path/to/share/qemu``.
 
 
 License
