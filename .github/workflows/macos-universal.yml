@@ -55,8 +55,8 @@ jobs:
 
       - name: Prepare Python deps
         run: |
-          python3 -m pip install --user --upgrade pip
-          python3 -m pip install --user tomli distlib
+          python3 -m pip install --user --upgrade pip --break-system-packages || true
+          python3 -m pip install --user tomli distlib --break-system-packages
 
       - name: Configure + Build (arm64)
         env:
@@ -112,4 +112,3 @@ jobs:
             qemu-system-ppc-universal.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
