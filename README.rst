@@ -157,12 +157,12 @@ Troubleshooting
   discoverable; if running outside the repo root or a bundled release, add
   ``-L pc-bios`` (or the path to ``share/qemu``) so QEMU can find ``vgabios``.
 
-- VGA BIOS not found: the CI universal ZIP now unpacks a flat layout with
-  ``bin/qemu-system-ppc-universal`` and ``share/qemu`` next to each other.
-  Run the binary from the ``bin`` directory and it will find
-  ``../share/qemu`` automatically via relocatable lookup. If you move things
-  around, keep ``bin`` and ``share/qemu`` together or run with
-  ``-L /path/to/share/qemu``.
+- VGA BIOS not found: the CI universal ZIP now unpacks into a single
+  directory that contains ``bin/`` and ``share/qemu`` inside it. Run the
+  binary from the ``bin`` subdirectory and it will find ``../share/qemu``
+  automatically via relocatable lookup. If you move things around, keep
+  ``bin`` and ``share/qemu`` together under the same parent directory or run
+  with ``-L /path/to/share/qemu``.
 
 
 License

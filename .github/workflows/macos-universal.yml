@@ -98,14 +98,15 @@ jobs:
           lipo -create artifacts/qemu-system-ppc-x86_64 artifacts/qemu-system-ppc-arm64 -output qemu-system-ppc-universal
           chmod +x qemu-system-ppc-universal
 
-          # Layout ZIP so it unpacks flat with bin/ and share/
-          # Binary goes under bin/ so relocatable lookup finds ../share/qemu
-          mkdir -p bin share/qemu
-          mv qemu-system-ppc-universal bin/
-          rsync -a --delete pc-bios/ share/qemu/
+          # Create a single top-level directory inside the ZIP that contains
+          # bin/ and share/ to avoid multiple root entries when unpacked.
+          PKG_DIR="qemu-ppc-screamer-macos"
+          mkdir -p "$PKG_DIR/bin" "$PKG_DIR/share/qemu"
+          mv qemu-system-ppc-universal "$PKG_DIR/bin/"
+          rsync -a --delete pc-bios/ "$PKG_DIR/share/qemu/"
 
-          # Package universal zip with flat layout (no extra top-level folder)
-          zip -9 -r qemu-system-ppc-universal.zip bin share
+          # Package the single folder so users get one directory on unzip
+          zip -9 -r qemu-system-ppc-universal.zip "$PKG_DIR"
 
           # Also package per-arch binaries for convenience (no bundle)
           zip -9 qemu-system-ppc-x86_64.zip artifacts/qemu-system-ppc-x86_64
