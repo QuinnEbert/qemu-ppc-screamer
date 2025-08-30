@@ -95,6 +95,9 @@ struct MACIOIDEState {
     bool dma_active;
     uint32_t timing_reg;
     uint32_t irq_reg;
+
+    /* Allow forcing PIO mode (disable IDE DMA) for compatibility */
+    bool use_dma;
 };
 
 #define MACIO_IDE_PMAC_NIRQS 2

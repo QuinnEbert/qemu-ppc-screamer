@@ -84,8 +84,17 @@
 #define NDRV_VGA_FILENAME "qemu_vga.ndrv"
 
 #define PROM_FILENAME "openbios-ppc"
-#define PROM_BASE 0xfff00000
-#define PROM_SIZE (1 * MiB)
+/*
+ * Default OpenBIOS mapping is 1 MiB at 0xFFF00000.
+ * Some real Mac ROMs (e.g. SheepShaver-style "Mac OS ROM") are larger
+ * (2–4 MiB, sometimes more) and are expected to be mapped at the very top
+ * of the 32-bit address space so the reset vector at 0xFFF00100 is valid.
+ * We detect non-ELF ROMs and map a larger ROM window ending at 0xFFFFFFFF
+ * when needed, while always keeping the CPU reset PC at 0xFFF00100.
+ */
+#define PROM_BASE        0xfff00000ULL
+#define PROM_SIZE        (1 * MiB)
+#define PROM_TOP         0x100000000ULL
 
 #define KERNEL_LOAD_ADDR 0x01000000
 #define KERNEL_GAP       0x00100000
@@ -124,8 +133,12 @@ static void ppc_core99_reset(void *opaque)
     PowerPCCPU *cpu = opaque;
 
     cpu_reset(CPU(cpu));
-    /* 970 CPUs want to get their initial IP as part of their boot protocol */
-    cpu->env.nip = PROM_BASE + 0x100;
+    /*
+     * Start from the PowerPC reset vector within the top-of-memory ROM
+     * window. This is 0xFFF00100 regardless of the total ROM size we map.
+     * (Earlier code derived this from PROM_BASE which broke with >1 MiB ROMs.)
+     */
+    cpu->env.nip = 0xFFF00100ULL;
 }
 
 /* PowerPC Mac99 hardware initialisation */
@@ -173,26 +186,63 @@ static void ppc_core99_init(MachineState *machine)
     }
     memory_region_add_subregion(get_system_memory(), 0, machine->ram);
 
-    /* allocate and load firmware ROM */
-    memory_region_init_rom(bios, NULL, "ppc_core99.bios", PROM_SIZE,
-                           &error_fatal);
-    memory_region_add_subregion(get_system_memory(), PROM_BASE, bios);
+    /* allocate and load firmware ROM (OpenBIOS ELF or raw ROM image) */
+    {
+        hwaddr rom_base = PROM_BASE;
+        uint64_t rom_size = PROM_SIZE;
+        bool is_elf = false;
 
-    filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
-    if (filename) {
-        /* Load OpenBIOS (ELF) */
-        bios_size = load_elf(filename, NULL, NULL, NULL, NULL,
-                             NULL, NULL, NULL, 1, PPC_ELF_MACHINE, 0, 0);
-
-        if (bios_size <= 0) {
-            /* or load binary ROM image */
-            bios_size = load_image_targphys(filename, PROM_BASE, PROM_SIZE);
+        filename = qemu_find_file(QEMU_FILE_TYPE_BIOS, bios_name);
+        if (filename) {
+            /* Peek at file header to decide ELF vs raw image and size */
+            gchar *file_buf = NULL;
+            gsize file_len = 0;
+            if (g_file_get_contents(filename, &file_buf, &file_len, NULL)) {
+                if (file_len >= 4 && !memcmp(file_buf, ELFMAG, SELFMAG)) {
+                    is_elf = true;
+                }
+                if (!is_elf) {
+                    /* Determine a ROM window size large enough for the image.
+                     * Round up to the next power-of-two MiB (1,2,4,8 MiB),
+                     * and map it at the top of 32-bit address space.
+                     */
+                    uint64_t need = file_len;
+                    uint64_t min = MiB;
+                    uint64_t max = 8ULL * MiB;
+                    rom_size = min;
+                    while (rom_size < need && rom_size < max) {
+                        rom_size <<= 1; /* 1 -> 2 -> 4 -> 8 MiB */
+                    }
+                    if (need > rom_size) {
+                        error_report("ROM image '%s' (%zu bytes) too large",
+                                     filename, (size_t)need);
+                        exit(1);
+                    }
+                    rom_base = (hwaddr)(PROM_TOP - rom_size);
+                }
+            }
+            g_free(file_buf);
         }
-        g_free(filename);
-    }
-    if (bios_size < 0 || bios_size > PROM_SIZE) {
-        error_report("could not load PowerPC bios '%s'", bios_name);
-        exit(1);
+
+        memory_region_init_rom(bios, NULL, "ppc_core99.bios", rom_size,
+                               &error_fatal);
+        memory_region_add_subregion(get_system_memory(), rom_base, bios);
+
+        if (filename) {
+            if (is_elf) {
+                /* Load OpenBIOS (ELF) */
+                bios_size = load_elf(filename, NULL, NULL, NULL, NULL,
+                                     NULL, NULL, NULL, 1, PPC_ELF_MACHINE, 0, 0);
+            } else {
+                /* Load raw ROM image into the selected top-of-memory window */
+                bios_size = load_image_targphys(filename, rom_base, rom_size);
+            }
+            g_free(filename);
+        }
+        if (bios_size < 0 || bios_size > rom_size) {
+            error_report("could not load PowerPC bios '%s'", bios_name);
+            exit(1);
+        }
     }
 
     if (machine->kernel_filename) {

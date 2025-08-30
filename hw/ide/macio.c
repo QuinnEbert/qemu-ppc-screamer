@@ -31,6 +31,7 @@
 #include "qemu/module.h"
 #include "hw/misc/macio/macio.h"
 #include "sysemu/block-backend.h"
+#include "sysemu/blockdev.h"
 #include "sysemu/dma.h"
 
 #include "ide-internal.h"
@@ -423,9 +424,11 @@ static void macio_ide_realizefn(DeviceState *dev, Error **errp)
     ide_bus_init_output_irq(&s->bus,
                             qdev_get_gpio_in(dev, MACIO_IDE_PMAC_IDE_IRQ));
 
-    /* Register DMA callbacks */
+    /* Register DMA callbacks if enabled */
     s->dma.ops = &dbdma_ops;
-    s->bus.dma = &s->dma;
+    if (s->use_dma) {
+        s->bus.dma = &s->dma;
+    }
 }
 
 static void pmac_ide_irq(void *opaque, int n, int level)
@@ -468,6 +471,7 @@ static void macio_ide_initfn(Object *obj)
 static Property macio_ide_properties[] = {
     DEFINE_PROP_UINT32("channel", MACIOIDEState, channel, 0),
     DEFINE_PROP_UINT32("addr", MACIOIDEState, addr, -1),
+    DEFINE_PROP_BOOL("use-dma", MACIOIDEState, use_dma, true),
     DEFINE_PROP_END_OF_LIST(),
 };
 
@@ -495,15 +499,32 @@ static void macio_ide_register_types(void)
     type_register_static(&macio_ide_type_info);
 }
 
-/* hd_table must contain 2 block drivers */
+/* hd_table must contain up to 2 block drivers */
 void macio_ide_init_drives(MACIOIDEState *s, DriveInfo **hd_table)
 {
     int i;
 
     for (i = 0; i < 2; i++) {
-        if (hd_table[i]) {
-            ide_bus_create_drive(&s->bus, i, hd_table[i]);
+        DriveInfo *di = hd_table[i];
+        if (!di) {
+            continue;
         }
+
+        const char *dtype = di->media_cd ? "ide-cd" : "ide-hd";
+        DeviceState *dev = qdev_new(dtype);
+        qdev_prop_set_uint32(dev, "unit", i);
+        qdev_prop_set_drive_err(dev, "drive", blk_by_legacy_dinfo(di),
+                                &error_fatal);
+
+        /* Present an Apple-like model string to improve Mac OS 9 tooling
+         * compatibility (Drive Setup/driver updates). Users can still
+         * override with -device ide-hd,...,model=... if desired.
+         */
+        if (!di->media_cd) {
+            qdev_prop_set_string(dev, "model", "APPLE HDD");
+        }
+
+        qdev_realize_and_unref(dev, &s->bus.qbus, &error_fatal);
     }
 }
 
