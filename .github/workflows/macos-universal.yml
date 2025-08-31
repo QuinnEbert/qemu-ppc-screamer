@@ -98,23 +98,25 @@ jobs:
           lipo -create artifacts/qemu-system-ppc-x86_64 artifacts/qemu-system-ppc-arm64 -output qemu-system-ppc-universal
           chmod +x qemu-system-ppc-universal
 
-          # Create a single top-level directory inside the ZIP that contains
-          # bin/ and share/ to avoid multiple root entries when unpacked.
-          PKG_DIR="qemu-ppc-screamer-macos"
-          mkdir -p "$PKG_DIR/bin" "$PKG_DIR/share/qemu"
-          mv qemu-system-ppc-universal "$PKG_DIR/bin/"
-          rsync -a --delete pc-bios/ "$PKG_DIR/share/qemu/"
+          # Create temp directory for flattening
+          FLAT_DIR="flat_temp"
+          mkdir -p "$FLAT_DIR"
+          
+          # Copy the binary directly to flat dir
+          cp qemu-system-ppc-universal "$FLAT_DIR/"
+          
+          # Copy ALL files from pc-bios DIRECTLY to flat dir (no subdirs!)
+          find pc-bios -type f -exec cp {} "$FLAT_DIR/" \;
+          
+          # Create the universal ZIP with everything flat at root
+          cd "$FLAT_DIR"
+          zip -9 ../qemu-system-ppc-universal.zip *
+          cd ..
+          
+          # Clean up
+          rm -rf "$FLAT_DIR"
 
-          # Package the single folder so users get one directory on unzip.
-          # Use macOS 'ditto' which preserves the parent directory reliably.
-          rm -f qemu-system-ppc-universal.zip
-          ditto -c -k --keepParent "$PKG_DIR" qemu-system-ppc-universal.zip
-
-          echo "Listing packaged contents for verification:"
-          echo "ZIP entry sample (should be prefixed by $PKG_DIR/):"
-          unzip -Z1 qemu-system-ppc-universal.zip | sed -n '1,20p'
-
-          # Also package per-arch binaries for convenience (no bundle)
+          # Also package per-arch binaries (already flat)
           zip -9 qemu-system-ppc-x86_64.zip artifacts/qemu-system-ppc-x86_64
           zip -9 qemu-system-ppc-arm64.zip artifacts/qemu-system-ppc-arm64
 
